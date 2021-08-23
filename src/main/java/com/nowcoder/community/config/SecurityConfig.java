@@ -15,6 +15,11 @@ import org.springframework.security.config.annotation.web.configuration.WebSecur
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.authentication.rememberme.InMemoryTokenRepositoryImpl;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 
 @Configuration
 public class SecurityConfig extends WebSecurityConfigurerAdapter {
@@ -92,5 +97,27 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                 .antMatchers("/letter").hasAnyAuthority("USER", "ADMIN")
                 .antMatchers("/admin").hasAnyAuthority("ADMIN")
                 .and().exceptionHandling().accessDeniedPage("/denied");
+
+        // 增加filter,在账号密码验证filter前调用（验证验证码）
+        http.addFilterBefore((request, response, filterChain) -> {
+            HttpServletRequest httpServletRequest = (HttpServletRequest) request;
+            HttpServletResponse httpServletResponse = (HttpServletResponse) response;
+            if (httpServletRequest.getServletPath().equals("/login")) {
+                String verifyCode = request.getParameter("verifyCode");
+                if (verifyCode == null || !verifyCode.equalsIgnoreCase("1234")) {
+                    request.setAttribute("error", "验证码错误");
+                    request.getRequestDispatcher("/loginpage").forward(request, response);
+                    return;
+                }
+            }
+
+            filterChain.doFilter(request, response); // 请求继续向下执行!!!没有这个，请求无法到达controller
+        }, UsernamePasswordAuthenticationFilter.class);
+
+        // 记住我
+        http.rememberMe()
+                .tokenRepository(new InMemoryTokenRepositoryImpl()) // 存在内存
+                .tokenValiditySeconds(3600 * 24)
+                .userDetailsService(userService);
     }
 }
